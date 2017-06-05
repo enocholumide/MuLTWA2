@@ -1,4 +1,4 @@
-
+$(document).ready( function() {
 
 // =============================
 // ========== LEAFLET ==========
@@ -14,34 +14,26 @@ osm = L.tileLayer(osmUrl, {
 // initialize the map on the "map" div with a given center and zoom
 var map = L.map('map').setView([19.04469, 72.9258], 12).addLayer(osm);
 
-// Script for adding marker on map click
-/*function onMapClick(e) {
+map.on('click', onMapClick);
 
-var marker = L.marker(e.latlng, {
-    draggable: true,
-    title: "Resource location",
-    alt: "Resource Location",
-    riseOnHover: true
-}).addTo(map)
-    .bindPopup(e.latlng.toString()).openPopup();
+var markerGroup = L.layerGroup().addTo(map);
 
-// Update marker on changing it's position
-marker.on("dragend", function (ev) {
+function onMapClick(e) {
 
-    var chagedPos = ev.target.getLatLng();
-    this.bindPopup(chagedPos.toString()).openPopup();
+    // get location & ids from map click
+    var latitude = e.latlng.lat
+    var longitude = e.latlng.lng;
+    
 
-});
+    // add marker to map & associated weather card in carousel
+    makeWeatherCard(latitude, longitude);
 }
 
-map.on('click', onMapClick);*/
-
 // =============================
-// ========== CAROUSEL ==========
+// ========== CAROUSEL =========
 // =============================
 
-// Initialize carousel
-console.log("hello")
+// initialize carousel
 $('.weather-carousel').slick({
     infinite: false,
     variableWidth: false,
@@ -50,26 +42,26 @@ $('.weather-carousel').slick({
     dots: true
 });
 
-$('.add-card-location-button').click(function() {
+function makeWeatherCard(lat, lon) {
 
-    console.log('button pushed')
-    var city = $('.inputCity').val();
-    var countryCode = $('.inputCountryCode').val();
-    var numDays = $('.inputNumDaysForLocation').val();
+    var numDays = 2; // this needs to be an input that is the difference between system date & input date (from calendar)
+
+    // prepare API call
     var apiKey = '66caf7904e4bf65c8754dc23dd947e5d';
-
     var weatherRequest = new XMLHttpRequest();
-
-    var requestString = 'http://api.openweathermap.org/data/2.5/forecast/daily?q='
-                        + city + ',' + countryCode + '&cnt=' + numDays + '&APPID=' + apiKey;
-
+    var requestString = 'http://api.openweathermap.org/data/2.5/forecast/daily?lat='
+                       + lat + '&lon=' + lon + '&cnt=' + numDays + '&APPID=' + apiKey;
     weatherRequest.open("GET", requestString, true);
 
+    // replace onload function of the weather request with the logic to build a new weather card using data
+    // from the response & also the leaflet ID of the associated marker.
     weatherRequest.onload = function (e) {
         if (weatherRequest.readyState === 4) {
             if (weatherRequest.status === 200) {
+
                 var weatherJSON = JSON.parse(weatherRequest.responseText);
                 console.log(weatherJSON);
+
                 var cityName = weatherJSON.city.name;
                 var avgTemperature = Math.round(weatherJSON.list[numDays-1].temp.day-273.15);
                 var minTemperature = Math.round(weatherJSON.list[numDays-1].temp.min-273.15);
@@ -77,7 +69,16 @@ $('.add-card-location-button').click(function() {
                 var conditionText = weatherJSON.list[numDays-1].weather[0].main;
                 var iconCode = weatherJSON.list[numDays-1].weather[0].icon;
 
-                var weatherCard = '<div class="weather-card card-narrow"><h3 class="weather-card-city-name"><b>'
+
+                markerIcon = L.icon({iconUrl: 'http://openweathermap.org/img/w/' + iconCode + ".png", iconAnchor: [25,25]});
+                var marker = L.marker([lat,lon], { icon: markerIcon }).addTo(markerGroup);
+                var leafletID = marker._leaflet_id;
+                markerGroup.addLayer(marker);
+
+                // weather card HTML
+                var weatherCard = '<div class="weather-card card-narrow" leafletid="'
+                    + leafletID +
+                    '"><h3 class="weather-card-city-name"><b>'
                     + cityName +
                     '</b></h3><h5 class="weather-card-city-date">'
                     + (numDays-1) +
@@ -93,20 +94,29 @@ $('.add-card-location-button').click(function() {
                     + maxTemperature +
                     '°</h6></td></tr></table></div></div>'
 
+                // add new weather card to carousel
                 $('.weather-carousel').slick('slickAdd', weatherCard);
             }
         }
     };
 
+    // send request to weather service
     weatherRequest.send(null);
 
-})
+}
 
 //Remove card
 $(document).on('click', '.weather-card-remove-button', function() {
 
+    // get leaflet id from card (should be the same as its marker) & remove the marker
+    var weatherCardLeafletID = $(this).parent().attr('leafletid');
+    markerGroup.removeLayer(weatherCardLeafletID);
+
+    // get this card's data-slick-id & remove it.
     var weatherCardIndex = $(this).parent().attr('data-slick-index');
     $('.weather-carousel').slick('slickRemove', weatherCardIndex)
     $('.weather-carousel').slick('refresh');
 
 })
+
+});
